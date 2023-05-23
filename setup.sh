@@ -1,117 +1,85 @@
 #!/bin/bash
 
-# Set hostname
-hostnamectl set-hostname sfu.mirotalk.haiphong.online
+# Update system packages
+sudo apt-get update
 
-# Update package lists
-apt-get update
-
-# Install essential build tools
-apt-get install -y build-essential
+# Install build essentials
+sudo apt-get install -y build-essential
 
 # Install Python 3.8 and pip
-DEBIAN_FRONTEND=noninteractive apt-get install -y tzdata
-apt install -y software-properties-common
-add-apt-repository ppa:deadsnakes/ppa
-apt update
-apt install -y python3.8 python3-pip
+sudo apt-get install -y python3.8 python3-pip
 
-# Install Node.js 18.x and npm
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-apt-get install -y nodejs
-npm install -g npm@latest
+# Install NodeJS 18.X and npm
+curl -sL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt-get install -y nodejs
 
-# Clone the Git repository
+# Clone the repository
 git clone https://github.com/miroslavpejic85/mirotalksfu.git
 
-# Change to the mirotalksfu directory
+# Navigate to the mirotalksfu directory
 cd mirotalksfu
 
 # Copy app/src/config.template.js to app/src/config.js
 cp app/src/config.template.js app/src/config.js
 
-# Replace 'getLocalIp()' with the server IP address in app/src/config.js
-sed -i "s/getLocalIp()/\$(ip addr show eth0 | grep -Po 'inet \K[\d.]+')/" app/src/config.js
+# Update the announcedIp in app/src/config.js
+sed -i "s/'Server Public IPv4'/'$(curl -s ifconfig.me)'/" app/src/config.js
+
+# Install dependencies
+npm install
 
 # Install Nginx
-apt-get install -y nginx
+sudo apt-get install -y nginx
 
-# Install Certbot (SSL certificates)
-snap install --classic certbot
-ln -s /snap/bin/certbot /usr/bin/certbot
-
-# Configure Nginx sites
-echo '
-# HTTP — redirect all traffic to HTTPS
+# Configure Nginx
+sudo tee /etc/nginx/sites-available/mirotalk <<EOF
 server {
-    if ($host = sfu.mirotalk.haiphong.online) {
-        return 301 https://$host$request_uri;
-    }
     listen 80;
-    listen [::]:80;
     server_name sfu.mirotalk.haiphong.online;
-    return 404;
+
+    location / {
+        proxy_pass http://localhost:3010;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_cache_bypass \$http_upgrade;
+    }
 }
 
-# MiroTalk SFU - HTTPS — proxy all requests to the Node app
 server {
-    # Enable HTTP/2
     listen 443 ssl http2;
-    listen [::]:443 ssl http2;
     server_name sfu.mirotalk.haiphong.online;
 
-    # Use the Let’s Encrypt certificates
     ssl_certificate /etc/letsencrypt/live/sfu.mirotalk.haiphong.online/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/sfu.mirotalk.haiphong.online/privkey.pem;
 
     location / {
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header Host $host;
-        proxy_pass http://localhost:3010/;
+        proxy_pass http://localhost:3010;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-    
-    # Proxy reserve for the domain to port 3010
-    location /socket.io/ {
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header Host $host;
-        proxy_pass http://localhost:3010/socket.io/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_cache_bypass \$http_upgrade;
     }
 }
-' > /etc/nginx/sites-enabled/default
+EOF
 
-# Check Nginx configuration
-nginx -t
+# Enable the site
+sudo ln -s /etc/nginx/sites-available/mirotalk /etc/nginx/sites-enabled/
+
+# Test Nginx configuration
+sudo nginx -t
 
 # Restart Nginx
-service nginx restart
+sudo systemctl restart nginx
 
-# Allow Mirotalk port (3010)
-ufw allow 3010
-
-# Allow SSH port (22)
-ufw allow 22
-
-# Enable UFW firewall
-ufw enable
-
-# Install PM2
-npm install -g pm2
-
-# Start the application using PM2
-pm2 start npm --name "mirotalksfu" -- start
-
-# Save the PM2 process list for automatic startup on system reboot
-pm2 save
+# Obtain SSL certificate with Certbot
+sudo apt-get install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d sfu.mirotalk.haiphong.online
 
 # Auto renew SSL certificate
-certbot renew --dry-run
+sudo certbot renew --dry-run
 
-# Show certificates
-certbot certificates
+# Check the installed certificates
+sudo certbot certificates
