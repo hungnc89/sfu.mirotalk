@@ -30,8 +30,8 @@ cd mirotalksfu
 # Copy app/src/config.template.js to app/src/config.js
 cp app/src/config.template.js app/src/config.js
 
-# Replace 'Server Public IPv4' with your server's public IPv4 address in app/src/config.js
-sed -i "s/'Server Public IPv4'/'$(curl -s ipinfo.io/ip)'/" app/src/config.js
+# Replace 'getLocalIp()' with the server IP address in app/src/config.js
+sed -i "s/getLocalIp()/\$(ip addr show eth0 | grep -Po 'inet \K[\d.]+')/" app/src/config.js
 
 # Install Nginx
 apt-get install -y nginx
@@ -90,7 +90,16 @@ server {
 nginx -t
 
 # Restart Nginx
-systemctl restart nginx
+service nginx restart
+
+# Allow Mirotalk port (3010)
+ufw allow 3010
+
+# Allow SSH port (22)
+ufw allow 22
+
+# Enable UFW firewall
+ufw enable
 
 # Install PM2
 npm install -g pm2
