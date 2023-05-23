@@ -17,8 +17,7 @@ apt update
 apt install -y python3.8 python3-pip
 
 # Install Node.js 18.x and npm
-apt install -y curl dirmngr apt-transport-https lsb-release ca-certificates
-curl -sL https://deb.nodesource.com/setup_18.x | bash -
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 apt-get install -y nodejs
 npm install -g npm@latest
 
@@ -38,8 +37,6 @@ sed -i "s/'Server Public IPv4'/'$(curl -s ipinfo.io/ip)'/" app/src/config.js
 apt-get install -y nginx
 
 # Install Certbot (SSL certificates)
-apt install -y snapd
-snap install core; snap refresh core
 snap install --classic certbot
 ln -s /snap/bin/certbot /usr/bin/certbot
 
@@ -82,7 +79,16 @@ server {
 nginx -t
 
 # Restart Nginx
-service nginx restart
+systemctl restart nginx
+
+# Install PM2
+npm install -g pm2
+
+# Start the application using PM2
+pm2 start npm --name "mirotalksfu" -- start
+
+# Save the PM2 process list for automatic startup on system reboot
+pm2 save
 
 # Auto renew SSL certificate
 certbot renew --dry-run
